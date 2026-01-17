@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Orbit Defense</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #000011;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 9/16;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            font-size: 16px;
+            pointer-events: none;
+        }
+        #shieldBar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #shieldFill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ecdc4, #00d4ff);
+            border-radius: 4px;
+            transition: width 0.2s;
+        }
+        #shieldLabel {
+            position: absolute;
+            bottom: 32px;
+            left: 20px;
+            color: #4ecdc4;
+            font-size: 12px;
+        }
+        #startScreen, #gameOverScreen, #waveScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 17, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            border-radius: 10px;
+            z-index: 10;
+        }
+        #gameOverScreen, #waveScreen {
+            display: none;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .instructions {
+            text-align: center;
+            margin: 20px;
+            line-height: 1.8;
+            color: #aaa;
+        }
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        .score-display {
+            font-size: 22px;
+            margin: 10px 0;
+        }
+        .high-score {
+            color: #ffd700;
+        }
+        #waveScreen h1 {
+            font-size: 48px;
+        }
+        #waveScreen .score-display {
+            color: #4ecdc4;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div>Wave: <span id="wave">1</span></div>
+            <div>Score: <span id="score">0</span></div>
+            <div>Health: <span id="health">100</span></div>
+        </div>
+        <div id="shieldLabel">Shield Energy</div>
+        <div id="shieldBar">
+            <div id="shieldFill" style="width: 100%"></div>
+        </div>
+
+        <div id="startScreen">
+            <h1>Orbit Defense</h1>
+            <div class="instructions">
+                Defend your planet from asteroids!<br><br>
+                👆 Tap to deploy orbital shields<br>
+                🛡️ Shields orbit and block asteroids<br>
+                ⚡ Shield energy regenerates over time
+            </div>
+            <button id="startBtn">Defend</button>
+            <div class="score-display high-score" id="highScoreDisplay"></div>
+        </div>
+
+        <div id="waveScreen">
+            <h1>Wave <span id="waveNum">1</span></h1>
+            <div class="score-display">Incoming!</div>
+        </div>
+
+        <div id="gameOverScreen">
+            <h1>Planet Lost</h1>
+            <div class="score-display">Wave: <span id="finalWave">1</span></div>
+            <div class="score-display">Score: <span id="finalScore">0</span></div>
+            <div class="score-display high-score">Best: <span id="finalHighScore">0</span></div>
+            <button id="restartBtn">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+
+        function resizeCanvas() {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        let canvasWidth, canvasHeight, centerX, centerY;
+        function getCanvasSize() {
+            const rect = container.getBoundingClientRect();
+            canvasWidth = rect.width;
+            canvasHeight = rect.height;
+            centerX = canvasWidth / 2;
+            centerY = canvasHeight / 2;
+        }
+        getCanvasSize();
+        window.addEventListener('resize', getCanvasSize);
+
+        // Game state
+        const PLANET_RADIUS = 40;
+        const SHIELD_ORBIT_RADIUS = 80;
+        const SHIELD_SIZE = 30;
+        const MAX_SHIELD_ENERGY = 100;
+        const SHIELD_COST = 25;
+        const SHIELD_REGEN = 0.3;
+
+        let shields = [];
+        let asteroids = [];
+        let particles = [];
+        let score = 0;
+        let wave = 1;
+        let health = 100;
+        let shieldEnergy = MAX_SHIELD_ENERGY;
+        let gameRunning = false;
+        let asteroidsRemaining = 0;
+        let highScore = parseInt(localStorage.getItem('orbitDefenseHighScore')) || 0;
+
+        // UI elements
+        const waveDisplay = document.getElementById('wave');
+        const scoreDisplay = document.getElementById('score');
+        const healthDisplay = document.getElementById('health');
+        const shieldFill = document.getElementById('shieldFill');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+
+        if (highScore > 0) {
+            highScoreDisplay.textContent = `Best: ${highScore}`;
+        }
+
+        function deployShield(angle) {
+            if (shieldEnergy < SHIELD_COST) return;
+            shieldEnergy -= SHIELD_COST;
+            updateShieldBar();
+
+            shields.push({
+                angle: angle,
+                orbitSpeed: 0.02 + Math.random() * 0.01,
+                life: 300, // frames
+                size: SHIELD_SIZE
+            });
+        }
+
+        function spawnAsteroid() {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.max(canvasWidth, canvasHeight);
+            const size = 15 + Math.random() * 20 + wave * 2;
+            const speed = 1 + Math.random() * 1.5 + wave * 0.1;
+
+            asteroids.push({
+                x: centerX + Math.cos(angle) * distance,
+                y: centerY + Math.sin(angle) * distance,
+                size: size,
+                speed: speed,
+                health: Math.ceil(size / 15),
+                angle: angle + Math.PI // Move toward center
+            });
+            asteroidsRemaining++;
+        }
+
+        function startWave() {
+            const asteroidCount = 3 + wave * 2;
+            for (let i = 0; i < asteroidCount; i++) {
+                setTimeout(() => spawnAsteroid(), i * 500);
+            }
+
+            // Show wave screen
+            document.getElementById('waveNum').textContent = wave;
+            document.getElementById('waveScreen').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('waveScreen').style.display = 'none';
+            }, 1500);
+        }
+
+        function createExplosion(x, y, color, count = 15) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 4;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    color: color,
+                    size: 2 + Math.random() * 3
+                });
+            }
+        }
+
+        function updateShieldBar() {
+            shieldFill.style.width = `${(shieldEnergy / MAX_SHIELD_ENERGY) * 100}%`;
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Regenerate shield
+            shieldEnergy = Math.min(MAX_SHIELD_ENERGY, shieldEnergy + SHIELD_REGEN);
+            updateShieldBar();
+
+            // Update shields
+            for (let i = shields.length - 1; i >= 0; i--) {
+                const shield = shields[i];
+                shield.angle += shield.orbitSpeed;
+                shield.life--;
+                if (shield.life <= 0) {
+                    shields.splice(i, 1);
+                }
+            }
+
+            // Update asteroids
+            for (let i = asteroids.length - 1; i >= 0; i--) {
+                const ast = asteroids[i];
+
+                // Move toward center
+                const dx = centerX - ast.x;
+                const dy = centerY - ast.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                ast.x += (dx / dist) * ast.speed;
+                ast.y += (dy / dist) * ast.speed;
+
+                // Check collision with planet
+                if (dist < PLANET_RADIUS + ast.size) {
+                    health -= Math.ceil(ast.size / 2);
+                    healthDisplay.textContent = Math.max(0, health);
+                    createExplosion(ast.x, ast.y, '#ff6b6b', 20);
+                    asteroids.splice(i, 1);
+                    asteroidsRemaining--;
+
+                    if (health <= 0) {
+                        gameOver();
+                        return;
+                    }
+                    continue;
+                }
+
+                // Check collision with shields
+                for (let j = shields.length - 1; j >= 0; j--) {
+                    const shield = shields[j];
+                    const shieldX = centerX + Math.cos(shield.angle) * SHIELD_ORBIT_RADIUS;
+                    const shieldY = centerY + Math.sin(shield.angle) * SHIELD_ORBIT_RADIUS;
+
+                    const sdx = ast.x - shieldX;
+                    const sdy = ast.y - shieldY;
+                    const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
+
+                    if (sDist < ast.size + shield.size / 2) {
+                        ast.health--;
+                        createExplosion(ast.x, ast.y, '#4ecdc4', 8);
+
+                        if (ast.health <= 0) {
+                            score += Math.ceil(ast.size);
+                            scoreDisplay.textContent = score;
+                            createExplosion(ast.x, ast.y, '#ffd93d', 20);
+                            asteroids.splice(i, 1);
+                            asteroidsRemaining--;
+                        } else {
+                            // Knock back asteroid
+                            ast.x += sdx / sDist * 20;
+                            ast.y += sdy / sDist * 20;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.98;
+                p.vy *= 0.98;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Check wave complete
+            if (asteroidsRemaining <= 0 && asteroids.length === 0) {
+                wave++;
+                waveDisplay.textContent = wave;
+                setTimeout(() => startWave(), 2000);
+            }
+        }
+
+        function draw() {
+            // Background
+            ctx.fillStyle = '#000011';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // Stars
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            for (let i = 0; i < 100; i++) {
+                const x = (i * 137.5) % canvasWidth;
+                const y = (i * 123.7) % canvasHeight;
+                const size = (i % 3) + 1;
+                ctx.beginPath();
+                ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Orbit path
+            ctx.strokeStyle = 'rgba(78, 205, 196, 0.2)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, SHIELD_ORBIT_RADIUS, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Planet
+            const planetGradient = ctx.createRadialGradient(
+                centerX - 10, centerY - 10, 0,
+                centerX, centerY, PLANET_RADIUS
+            );
+            planetGradient.addColorStop(0, '#6c5ce7');
+            planetGradient.addColorStop(0.5, '#4834d4');
+            planetGradient.addColorStop(1, '#2c2c54');
+            ctx.fillStyle = planetGradient;
+            ctx.shadowColor = '#6c5ce7';
+            ctx.shadowBlur = 30;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, PLANET_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Planet health ring
+            ctx.strokeStyle = health > 50 ? '#4ecdc4' : health > 25 ? '#ffd93d' : '#ff6b6b';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, PLANET_RADIUS + 5, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * health / 100));
+            ctx.stroke();
+
+            // Shields
+            shields.forEach(shield => {
+                const x = centerX + Math.cos(shield.angle) * SHIELD_ORBIT_RADIUS;
+                const y = centerY + Math.sin(shield.angle) * SHIELD_ORBIT_RADIUS;
+                const alpha = Math.min(1, shield.life / 50);
+
+                ctx.fillStyle = `rgba(78, 205, 196, ${alpha * 0.8})`;
+                ctx.shadowColor = '#4ecdc4';
+                ctx.shadowBlur = 15;
+
+                // Shield arc shape
+                ctx.beginPath();
+                ctx.arc(x, y, shield.size / 2, shield.angle - 0.5, shield.angle + 0.5);
+                ctx.lineTo(x, y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            // Asteroids
+            asteroids.forEach(ast => {
+                const gradient = ctx.createRadialGradient(
+                    ast.x - ast.size * 0.3, ast.y - ast.size * 0.3, 0,
+                    ast.x, ast.y, ast.size
+                );
+                gradient.addColorStop(0, '#8b7355');
+                gradient.addColorStop(0.5, '#5d4e37');
+                gradient.addColorStop(1, '#3d3426');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(ast.x, ast.y, ast.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Damage indicator
+                if (ast.health < Math.ceil(ast.size / 15)) {
+                    ctx.strokeStyle = '#ff6b6b';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(ast.x - ast.size * 0.5, ast.y - ast.size * 0.3);
+                    ctx.lineTo(ast.x + ast.size * 0.2, ast.y + ast.size * 0.4);
+                    ctx.stroke();
+                }
+            });
+
+            // Particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('orbitDefenseHighScore', highScore);
+            }
+            document.getElementById('finalWave').textContent = wave;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalHighScore').textContent = highScore;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        function startGame() {
+            shields = [];
+            asteroids = [];
+            particles = [];
+            score = 0;
+            wave = 1;
+            health = 100;
+            shieldEnergy = MAX_SHIELD_ENERGY;
+            asteroidsRemaining = 0;
+
+            waveDisplay.textContent = wave;
+            scoreDisplay.textContent = score;
+            healthDisplay.textContent = health;
+            updateShieldBar();
+
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+
+            gameRunning = true;
+            startWave();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Input handlers
+        function handleInput(e) {
+            if (!gameRunning) return;
+
+            const rect = container.getBoundingClientRect();
+            const x = (e.clientX || e.pageX) - rect.left;
+            const y = (e.clientY || e.pageY) - rect.top;
+
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const angle = Math.atan2(dy, dx);
+
+            deployShield(angle);
+        }
+
+        container.addEventListener('click', handleInput);
+        container.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleInput(e.touches[0]);
+        });
+
+        document.getElementById('startBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            startGame();
+        });
+        document.getElementById('restartBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            startGame();
+        });
+
+        // Initial draw
+        getCanvasSize();
+        draw();
+    </script>
+</body>
+</html>

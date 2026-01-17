@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Memory Rhythm</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+        #header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        #stats {
+            display: flex;
+            justify-content: space-around;
+            font-size: 16px;
+            color: #aaa;
+        }
+        #stats span {
+            color: #4ecdc4;
+        }
+        #gameBoard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .tile {
+            aspect-ratio: 1;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .tile::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40%;
+            height: 40%;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+        }
+        .tile.active {
+            transform: scale(0.95);
+            filter: brightness(1.5);
+            box-shadow: 0 0 30px currentColor;
+        }
+        .tile:active {
+            transform: scale(0.95);
+        }
+        #tile0 { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: #ff6b6b; }
+        #tile1 { background: linear-gradient(135deg, #4ecdc4, #3dbdb5); color: #4ecdc4; }
+        #tile2 { background: linear-gradient(135deg, #ffd93d, #eec82c); color: #ffd93d; }
+        #tile3 { background: linear-gradient(135deg, #6c5ce7, #5b4bd6); color: #6c5ce7; }
+
+        #message {
+            text-align: center;
+            color: white;
+            font-size: 20px;
+            min-height: 30px;
+            margin: 20px 0;
+        }
+        #startScreen, #gameOverScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 26, 46, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+        #gameOverScreen {
+            display: none;
+        }
+        .instructions {
+            text-align: center;
+            margin: 20px 40px;
+            line-height: 1.8;
+            color: #aaa;
+        }
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        .score-display {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .high-score {
+            color: #ffd700;
+        }
+        #roundIndicator {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .round-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.3s;
+        }
+        .round-dot.completed {
+            background: #4ecdc4;
+        }
+        .round-dot.current {
+            background: #ffd93d;
+            box-shadow: 0 0 10px #ffd93d;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="header">
+            <h1>Memory Rhythm</h1>
+            <div id="stats">
+                <div>Round: <span id="round">1</span></div>
+                <div>Score: <span id="score">0</span></div>
+                <div>Best: <span id="highScore">0</span></div>
+            </div>
+            <div id="roundIndicator"></div>
+        </div>
+
+        <div id="gameBoard">
+            <div class="tile" id="tile0"></div>
+            <div class="tile" id="tile1"></div>
+            <div class="tile" id="tile2"></div>
+            <div class="tile" id="tile3"></div>
+        </div>
+
+        <div id="message">Watch carefully...</div>
+
+        <div id="startScreen">
+            <h1>Memory Rhythm</h1>
+            <div class="instructions">
+                Watch the pattern of colored tiles<br>
+                Then tap them back in the same order!<br><br>
+                🎵 Tap in rhythm for bonus points<br>
+                🧠 Each round adds one more tile
+            </div>
+            <button id="startBtn">Play</button>
+            <div class="score-display high-score" id="startHighScore"></div>
+        </div>
+
+        <div id="gameOverScreen">
+            <h1>Game Over!</h1>
+            <div class="score-display">Score: <span id="finalScore">0</span></div>
+            <div class="score-display">Round: <span id="finalRound">0</span></div>
+            <div class="score-display high-score">Best: <span id="finalHighScore">0</span></div>
+            <button id="restartBtn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Audio context for tones
+        let audioCtx = null;
+        const frequencies = [262, 330, 392, 523]; // C4, E4, G4, C5
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playTone(index, duration = 300) {
+            if (!audioCtx) return;
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.frequency.value = frequencies[index];
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration / 1000);
+
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + duration / 1000);
+        }
+
+        function playErrorSound() {
+            if (!audioCtx) return;
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.frequency.value = 150;
+            oscillator.type = 'sawtooth';
+
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        }
+
+        // Game state
+        let sequence = [];
+        let playerSequence = [];
+        let round = 1;
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('memoryRhythmHighScore')) || 0;
+        let isPlaying = false;
+        let isPlayerTurn = false;
+        let lastTapTime = 0;
+        let rhythmBonus = 0;
+
+        // DOM elements
+        const tiles = document.querySelectorAll('.tile');
+        const roundDisplay = document.getElementById('round');
+        const scoreDisplay = document.getElementById('score');
+        const highScoreDisplay = document.getElementById('highScore');
+        const messageDisplay = document.getElementById('message');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const roundIndicator = document.getElementById('roundIndicator');
+        const startHighScore = document.getElementById('startHighScore');
+
+        // Initialize high score display
+        highScoreDisplay.textContent = highScore;
+        if (highScore > 0) {
+            startHighScore.textContent = `Best: ${highScore}`;
+        }
+
+        function activateTile(index, duration = 400) {
+            const tile = tiles[index];
+            tile.classList.add('active');
+            playTone(index, duration);
+            setTimeout(() => {
+                tile.classList.remove('active');
+            }, duration);
+        }
+
+        function updateRoundIndicator() {
+            roundIndicator.innerHTML = '';
+            for (let i = 1; i <= Math.min(round + 2, 10); i++) {
+                const dot = document.createElement('div');
+                dot.className = 'round-dot';
+                if (i < round) dot.classList.add('completed');
+                if (i === round) dot.classList.add('current');
+                roundIndicator.appendChild(dot);
+            }
+        }
+
+        async function playSequence() {
+            isPlayerTurn = false;
+            messageDisplay.textContent = 'Watch carefully...';
+
+            await sleep(800);
+
+            for (let i = 0; i < sequence.length; i++) {
+                if (!isPlaying) return;
+                activateTile(sequence[i], 400);
+                await sleep(600);
+            }
+
+            await sleep(300);
+            isPlayerTurn = true;
+            playerSequence = [];
+            lastTapTime = 0;
+            rhythmBonus = 0;
+            messageDisplay.textContent = 'Your turn!';
+        }
+
+        function addToSequence() {
+            sequence.push(Math.floor(Math.random() * 4));
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function handleTileClick(index) {
+            if (!isPlayerTurn || !isPlaying) return;
+
+            initAudio();
+            activateTile(index, 200);
+            playerSequence.push(index);
+
+            // Calculate rhythm bonus
+            const now = Date.now();
+            if (lastTapTime > 0) {
+                const timeDiff = now - lastTapTime;
+                if (timeDiff > 400 && timeDiff < 700) {
+                    rhythmBonus += 5;
+                }
+            }
+            lastTapTime = now;
+
+            // Check if correct
+            const currentIndex = playerSequence.length - 1;
+            if (playerSequence[currentIndex] !== sequence[currentIndex]) {
+                gameOver();
+                return;
+            }
+
+            // Check if sequence complete
+            if (playerSequence.length === sequence.length) {
+                isPlayerTurn = false;
+                score += 10 * round + rhythmBonus;
+                scoreDisplay.textContent = score;
+
+                if (rhythmBonus > 0) {
+                    messageDisplay.textContent = `Perfect! +${rhythmBonus} rhythm bonus!`;
+                } else {
+                    messageDisplay.textContent = 'Correct!';
+                }
+
+                round++;
+                roundDisplay.textContent = round;
+                updateRoundIndicator();
+
+                setTimeout(() => {
+                    addToSequence();
+                    playSequence();
+                }, 1500);
+            }
+        }
+
+        function startGame() {
+            initAudio();
+            sequence = [];
+            playerSequence = [];
+            round = 1;
+            score = 0;
+            isPlaying = true;
+
+            roundDisplay.textContent = round;
+            scoreDisplay.textContent = score;
+            updateRoundIndicator();
+
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+
+            addToSequence();
+            playSequence();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            isPlayerTurn = false;
+            playErrorSound();
+            messageDisplay.textContent = 'Wrong!';
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('memoryRhythmHighScore', highScore);
+                highScoreDisplay.textContent = highScore;
+            }
+
+            setTimeout(() => {
+                document.getElementById('finalScore').textContent = score;
+                document.getElementById('finalRound').textContent = round;
+                document.getElementById('finalHighScore').textContent = highScore;
+                gameOverScreen.style.display = 'flex';
+            }, 1000);
+        }
+
+        // Event listeners
+        tiles.forEach((tile, index) => {
+            tile.addEventListener('click', () => handleTileClick(index));
+            tile.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleTileClick(index);
+            });
+        });
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+    </script>
+</body>
+</html>
