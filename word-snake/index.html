@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="description" content="Classic snake meets word puzzle - collect letters to spell words">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.svg">
+    <link rel="apple-touch-icon" href="icon-192.svg">
+    <title>Word Snake</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            padding-top: max(15px, env(safe-area-inset-top));
+            color: white;
+            pointer-events: none;
+        }
+        #topBar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        #targetWord {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            color: #ffd93d;
+            text-shadow: 0 0 10px rgba(255, 217, 61, 0.5);
+        }
+        #collectedLetters {
+            text-align: center;
+            font-size: 20px;
+            margin-top: 8px;
+            color: #4ecdc4;
+            min-height: 28px;
+        }
+        #category {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-top: 5px;
+        }
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 26, 46, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+        #gameOverScreen {
+            display: none;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #4ecdc4, #44bd32);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .instructions {
+            text-align: center;
+            margin: 20px;
+            line-height: 1.8;
+            color: #aaa;
+        }
+        button {
+            background: linear-gradient(45deg, #4ecdc4, #44bd32);
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        .score-display {
+            font-size: 22px;
+            margin: 10px 0;
+        }
+        .high-score {
+            color: #ffd700;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 5px;
+        }
+        .ctrl-btn {
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 10px;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .ctrl-btn:active {
+            background: rgba(255,255,255,0.3);
+        }
+        #btnUp { grid-column: 2; grid-row: 1; }
+        #btnLeft { grid-column: 1; grid-row: 2; }
+        #btnRight { grid-column: 3; grid-row: 2; }
+        #btnDown { grid-column: 2; grid-row: 3; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div id="topBar">
+                <div>Score: <span id="score">0</span></div>
+                <div>Words: <span id="words">0</span></div>
+            </div>
+            <div id="targetWord">APPLE</div>
+            <div id="collectedLetters"></div>
+            <div id="category">Category: Fruits</div>
+        </div>
+
+        <div id="controls">
+            <button class="ctrl-btn" id="btnUp">↑</button>
+            <button class="ctrl-btn" id="btnLeft">←</button>
+            <button class="ctrl-btn" id="btnRight">→</button>
+            <button class="ctrl-btn" id="btnDown">↓</button>
+        </div>
+
+        <div id="startScreen">
+            <h1>Word Snake</h1>
+            <div class="instructions">
+                Collect letters to spell words!<br><br>
+                🐍 Swipe or use arrows to move<br>
+                📝 Spell the target word in order<br>
+                ⚠️ Wrong letters make you grow!
+            </div>
+            <button id="startBtn">Play</button>
+            <div class="score-display high-score" id="highScoreDisplay"></div>
+        </div>
+
+        <div id="gameOverScreen">
+            <h1>Game Over!</h1>
+            <div class="score-display">Score: <span id="finalScore">0</span></div>
+            <div class="score-display">Words: <span id="finalWords">0</span></div>
+            <div class="score-display high-score">Best: <span id="finalHighScore">0</span></div>
+            <button id="restartBtn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = container.clientHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            getCanvasSize();
+            calculateGrid();
+        }
+
+        let canvasWidth, canvasHeight;
+        function getCanvasSize() {
+            canvasWidth = container.clientWidth;
+            canvasHeight = container.clientHeight;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const wordLists = {
+            'Fruits': ['APPLE', 'MANGO', 'GRAPE', 'LEMON', 'PEACH', 'MELON', 'BERRY', 'PLUM', 'KIWI', 'PEAR'],
+            'Animals': ['TIGER', 'HORSE', 'EAGLE', 'SHARK', 'SNAKE', 'ZEBRA', 'CAMEL', 'MOUSE', 'WHALE', 'FROG'],
+            'Colors': ['GREEN', 'BLACK', 'WHITE', 'BROWN', 'CORAL', 'IVORY', 'PEACH', 'OLIVE', 'AZURE', 'CREAM'],
+            'Foods': ['BREAD', 'PIZZA', 'PASTA', 'SALAD', 'STEAK', 'TACO', 'SUSHI', 'BACON', 'RICE', 'SOUP'],
+            'Nature': ['OCEAN', 'RIVER', 'STORM', 'CLOUD', 'STONE', 'GRASS', 'FLAME', 'FROST', 'BLOOM', 'TREE']
+        };
+
+        const categories = Object.keys(wordLists);
+        const GRID_SIZE = 20;
+        const GAME_AREA_TOP = 120;
+        const GAME_AREA_BOTTOM = 220;
+
+        let snake = [];
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let letters = [];
+        let currentWord = '';
+        let currentCategory = '';
+        let collectedLetters = '';
+        let score = 0;
+        let wordsCompleted = 0;
+        let gameRunning = false;
+        let gameSpeed = 150;
+        let lastMoveTime = 0;
+        let highScore = parseInt(localStorage.getItem('wordSnakeHighScore')) || 0;
+
+        let gridCols, gridRows, offsetX, offsetY;
+
+        function calculateGrid() {
+            const gameHeight = canvasHeight - GAME_AREA_TOP - GAME_AREA_BOTTOM;
+            gridCols = Math.floor(canvasWidth / GRID_SIZE);
+            gridRows = Math.floor(gameHeight / GRID_SIZE);
+            offsetX = (canvasWidth - gridCols * GRID_SIZE) / 2;
+            offsetY = GAME_AREA_TOP + (gameHeight - gridRows * GRID_SIZE) / 2;
+        }
+
+        function initGame() {
+            calculateGrid();
+            snake = [
+                { x: Math.floor(gridCols / 2), y: Math.floor(gridRows / 2) },
+                { x: Math.floor(gridCols / 2) - 1, y: Math.floor(gridRows / 2) },
+                { x: Math.floor(gridCols / 2) - 2, y: Math.floor(gridRows / 2) }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            collectedLetters = '';
+            score = 0;
+            wordsCompleted = 0;
+            gameSpeed = 150;
+            letters = [];
+            updateUI();
+            pickNewWord();
+            spawnLetters();
+        }
+
+        function pickNewWord() {
+            currentCategory = categories[Math.floor(Math.random() * categories.length)];
+            const words = wordLists[currentCategory];
+            currentWord = words[Math.floor(Math.random() * words.length)];
+            collectedLetters = '';
+            document.getElementById('targetWord').textContent = currentWord;
+            document.getElementById('collectedLetters').textContent = '';
+            document.getElementById('category').textContent = `Category: ${currentCategory}`;
+        }
+
+        function spawnLetters() {
+            letters = [];
+            const neededLetters = currentWord.slice(collectedLetters.length);
+            for (const letter of neededLetters) {
+                spawnLetter(letter, true);
+            }
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            for (let i = 0; i < 5; i++) {
+                const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
+                spawnLetter(randomLetter, false);
+            }
+        }
+
+        function spawnLetter(letter, isTarget) {
+            let attempts = 0;
+            while (attempts < 50) {
+                const x = Math.floor(Math.random() * gridCols);
+                const y = Math.floor(Math.random() * gridRows);
+                if (snake.some(s => s.x === x && s.y === y)) { attempts++; continue; }
+                if (letters.some(l => l.x === x && l.y === y)) { attempts++; continue; }
+                letters.push({ x, y, letter, isTarget });
+                break;
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('words').textContent = wordsCompleted;
+            document.getElementById('collectedLetters').textContent = collectedLetters;
+        }
+
+        function update(timestamp) {
+            if (!gameRunning) return;
+            if (timestamp - lastMoveTime < gameSpeed) return;
+            lastMoveTime = timestamp;
+
+            direction = { ...nextDirection };
+            const head = { ...snake[0] };
+            head.x += direction.x;
+            head.y += direction.y;
+
+            if (head.x < 0) head.x = gridCols - 1;
+            if (head.x >= gridCols) head.x = 0;
+            if (head.y < 0) head.y = gridRows - 1;
+            if (head.y >= gridRows) head.y = 0;
+
+            if (snake.some(s => s.x === head.x && s.y === head.y)) {
+                gameOver();
+                return;
+            }
+
+            snake.unshift(head);
+
+            let ate = false;
+            for (let i = letters.length - 1; i >= 0; i--) {
+                const letter = letters[i];
+                if (letter.x === head.x && letter.y === head.y) {
+                    const nextNeeded = currentWord[collectedLetters.length];
+
+                    if (letter.letter === nextNeeded) {
+                        collectedLetters += letter.letter;
+                        score += 10;
+
+                        if (collectedLetters === currentWord) {
+                            wordsCompleted++;
+                            score += currentWord.length * 20;
+                            gameSpeed = Math.max(80, gameSpeed - 5);
+                            snake = snake.slice(0, 3);
+                            pickNewWord();
+                            spawnLetters();
+                        }
+                    } else {
+                        ate = true;
+                        score = Math.max(0, score - 5);
+                    }
+
+                    letters.splice(i, 1);
+                    updateUI();
+
+                    if (letters.length < 8) {
+                        const neededLetters = currentWord.slice(collectedLetters.length);
+                        if (neededLetters.length > 0 && Math.random() < 0.5) {
+                            spawnLetter(neededLetters[0], true);
+                        } else {
+                            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                            spawnLetter(alphabet[Math.floor(Math.random() * alphabet.length)], false);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (!ate) snake.pop();
+            if (snake.length > gridCols * gridRows * 0.5) gameOver();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(offsetX, offsetY, gridCols * GRID_SIZE, gridRows * GRID_SIZE);
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= gridCols; x++) {
+                ctx.beginPath();
+                ctx.moveTo(offsetX + x * GRID_SIZE, offsetY);
+                ctx.lineTo(offsetX + x * GRID_SIZE, offsetY + gridRows * GRID_SIZE);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= gridRows; y++) {
+                ctx.beginPath();
+                ctx.moveTo(offsetX, offsetY + y * GRID_SIZE);
+                ctx.lineTo(offsetX + gridCols * GRID_SIZE, offsetY + y * GRID_SIZE);
+                ctx.stroke();
+            }
+
+            letters.forEach(letter => {
+                const x = offsetX + letter.x * GRID_SIZE + GRID_SIZE / 2;
+                const y = offsetY + letter.y * GRID_SIZE + GRID_SIZE / 2;
+                const nextNeeded = currentWord[collectedLetters.length];
+                const isNeeded = letter.letter === nextNeeded;
+
+                ctx.fillStyle = isNeeded ? '#ffd93d' : 'rgba(255,255,255,0.6)';
+                ctx.shadowColor = isNeeded ? '#ffd93d' : 'transparent';
+                ctx.shadowBlur = isNeeded ? 10 : 0;
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(letter.letter, x, y);
+                ctx.shadowBlur = 0;
+            });
+
+            snake.forEach((segment, index) => {
+                const x = offsetX + segment.x * GRID_SIZE;
+                const y = offsetY + segment.y * GRID_SIZE;
+                const isHead = index === 0;
+
+                if (isHead) {
+                    ctx.fillStyle = '#4ecdc4';
+                    ctx.shadowColor = '#4ecdc4';
+                    ctx.shadowBlur = 15;
+                } else {
+                    const alpha = 1 - (index / snake.length) * 0.5;
+                    ctx.fillStyle = `rgba(78, 205, 196, ${alpha})`;
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.beginPath();
+                ctx.roundRect(x + 2, y + 2, GRID_SIZE - 4, GRID_SIZE - 4, 4);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                if (index > 0 && index <= collectedLetters.length) {
+                    ctx.fillStyle = '#1a1a2e';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(collectedLetters[index - 1], x + GRID_SIZE / 2, y + GRID_SIZE / 2);
+                }
+
+                if (isHead) {
+                    ctx.fillStyle = '#1a1a2e';
+                    const eyeOffset = 4;
+                    if (direction.x === 1) {
+                        ctx.beginPath();
+                        ctx.arc(x + GRID_SIZE - eyeOffset, y + eyeOffset + 2, 2, 0, Math.PI * 2);
+                        ctx.arc(x + GRID_SIZE - eyeOffset, y + GRID_SIZE - eyeOffset - 2, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (direction.x === -1) {
+                        ctx.beginPath();
+                        ctx.arc(x + eyeOffset, y + eyeOffset + 2, 2, 0, Math.PI * 2);
+                        ctx.arc(x + eyeOffset, y + GRID_SIZE - eyeOffset - 2, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (direction.y === 1) {
+                        ctx.beginPath();
+                        ctx.arc(x + eyeOffset + 2, y + GRID_SIZE - eyeOffset, 2, 0, Math.PI * 2);
+                        ctx.arc(x + GRID_SIZE - eyeOffset - 2, y + GRID_SIZE - eyeOffset, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(x + eyeOffset + 2, y + eyeOffset, 2, 0, Math.PI * 2);
+                        ctx.arc(x + GRID_SIZE - eyeOffset - 2, y + eyeOffset, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            });
+        }
+
+        function gameLoop(timestamp) {
+            if (!gameRunning) return;
+            update(timestamp);
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('wordSnakeHighScore', highScore);
+            }
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalWords').textContent = wordsCompleted;
+            document.getElementById('finalHighScore').textContent = highScore;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        function startGame() {
+            initGame();
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            gameRunning = true;
+            lastMoveTime = 0;
+            requestAnimationFrame(gameLoop);
+        }
+
+        if (highScore > 0) {
+            document.getElementById('highScoreDisplay').textContent = `Best: ${highScore}`;
+        }
+
+        function setDirection(dx, dy) {
+            if (direction.x === -dx && direction.y === -dy) return;
+            if (dx !== 0 || dy !== 0) {
+                nextDirection = { x: dx, y: dy };
+            }
+        }
+
+        document.getElementById('btnUp').addEventListener('click', () => setDirection(0, -1));
+        document.getElementById('btnDown').addEventListener('click', () => setDirection(0, 1));
+        document.getElementById('btnLeft').addEventListener('click', () => setDirection(-1, 0));
+        document.getElementById('btnRight').addEventListener('click', () => setDirection(1, 0));
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': setDirection(0, -1); break;
+                case 'ArrowDown': case 's': case 'S': setDirection(0, 1); break;
+                case 'ArrowLeft': case 'a': case 'A': setDirection(-1, 0); break;
+                case 'ArrowRight': case 'd': case 'D': setDirection(1, 0); break;
+            }
+        });
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        canvas.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > 30) setDirection(dx > 0 ? 1 : -1, 0);
+            } else {
+                if (Math.abs(dy) > 30) setDirection(0, dy > 0 ? 1 : -1);
+            }
+        });
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+        calculateGrid();
+        draw();
+    </script>
+</body>
+</html>

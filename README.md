@@ -88,11 +88,34 @@ Classic snake gameplay meets word puzzles. Guide your snake to collect letters a
 - **No Installation:** Just open the HTML file in any browser
 - **Responsive:** Adapts to any screen size
 
-## How to Play
+## How to Play (Browser)
 
 1. Download or clone this repository
 2. Open any `.html` file in a web browser
 3. Play!
+
+## Install as Android App (APK)
+
+Each game folder contains PWA files ready for APK conversion:
+
+### Quick Method (PWA Builder):
+1. Host the game online (GitHub Pages, Netlify, or Vercel)
+2. Go to [pwabuilder.com](https://www.pwabuilder.com/)
+3. Enter your game URL
+4. Click "Package for stores" → "Android" → Download APK
+
+### Detailed Instructions:
+See [BUILD_APK.md](BUILD_APK.md) for complete step-by-step guide.
+
+### Game Folders (PWA-ready):
+```
+games/
+├── color-clash/      → Color Clash APK
+├── memory-rhythm/    → Memory Rhythm APK
+├── gravity-flip/     → Gravity Flip APK
+├── orbit-defense/    → Orbit Defense APK
+└── word-snake/       → Word Snake APK
+```
 
 ## Browser Support
 

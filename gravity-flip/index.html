@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f0f23">
+    <meta name="description" content="Navigate through obstacles by flipping gravity">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.svg">
+    <link rel="apple-touch-icon" href="icon-192.svg">
+    <title>Gravity Flip</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0f0f23;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            padding-top: max(15px, env(safe-area-inset-top));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            font-size: 16px;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #levelInfo {
+            display: flex;
+            gap: 20px;
+        }
+        #stars {
+            color: #ffd700;
+            font-size: 20px;
+        }
+        #startScreen, #gameOverScreen, #levelComplete {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 15, 35, 0.98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+        #gameOverScreen, #levelComplete {
+            display: none;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #00d4ff, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .instructions {
+            text-align: center;
+            margin: 20px;
+            line-height: 1.8;
+            color: #aaa;
+        }
+        button {
+            background: linear-gradient(45deg, #00d4ff, #7b2ff7);
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        .score-display {
+            font-size: 22px;
+            margin: 10px 0;
+        }
+        .star-earned {
+            font-size: 40px;
+            margin: 15px 0;
+        }
+        #gravityIndicator {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 30px;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div id="levelInfo">
+                <div>Level: <span id="level">1</span></div>
+                <div id="stars"></div>
+            </div>
+            <div>Deaths: <span id="deaths">0</span></div>
+        </div>
+        <div id="gravityIndicator">⬇️</div>
+
+        <div id="startScreen">
+            <h1>Gravity Flip</h1>
+            <div class="instructions">
+                Navigate through obstacles<br>
+                by flipping gravity!<br><br>
+                👆 Tap anywhere to flip gravity<br>
+                ⭐ Collect stars for bonus points<br>
+                🚪 Reach the exit to advance
+            </div>
+            <button id="startBtn">Play</button>
+        </div>
+
+        <div id="levelComplete">
+            <h1>Level Complete!</h1>
+            <div class="star-earned" id="starsEarned"></div>
+            <div class="score-display">Level <span id="completedLevel">1</span></div>
+            <button id="nextLevelBtn">Next Level</button>
+        </div>
+
+        <div id="gameOverScreen">
+            <h1>Congratulations!</h1>
+            <div class="score-display">All Levels Complete!</div>
+            <div class="score-display">Total Stars: <span id="totalStars">0</span>/30</div>
+            <div class="score-display">Total Deaths: <span id="totalDeaths">0</span></div>
+            <button id="restartBtn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('gameContainer');
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = container.clientHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            getCanvasSize();
+        }
+
+        let canvasWidth, canvasHeight;
+        function getCanvasSize() {
+            canvasWidth = container.clientWidth;
+            canvasHeight = container.clientHeight;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        let player = { x: 0, y: 0, vy: 0, size: 15 };
+        let gravityDir = 1;
+        let platforms = [];
+        let spikes = [];
+        let stars = [];
+        let exitZone = null;
+        let currentLevel = 1;
+        let totalStars = 0;
+        let deaths = 0;
+        let gameRunning = false;
+        let levelComplete = false;
+
+        const GRAVITY = 0.4;
+        const MAX_FALL_SPEED = 10;
+        const SCROLL_SPEED = 2;
+
+        function generateLevel(levelNum) {
+            platforms = [];
+            spikes = [];
+            stars = [];
+
+            const levelWidth = canvasWidth * (3 + levelNum * 0.5);
+            const sections = Math.floor(levelWidth / 200);
+
+            platforms.push({ x: 0, y: canvasHeight * 0.6, width: 150, height: 20 });
+
+            for (let i = 1; i < sections; i++) {
+                const sectionX = i * 200;
+                const isTop = Math.random() > 0.5;
+                const y = isTop ? canvasHeight * 0.25 : canvasHeight * 0.65;
+
+                platforms.push({ x: sectionX, y: y, width: 100 + Math.random() * 80, height: 20 });
+
+                if (Math.random() < 0.3 + levelNum * 0.05) {
+                    const spikeY = isTop ? y + 25 : y - 20;
+                    spikes.push({ x: sectionX + 30, y: spikeY, width: 40, height: 15, pointUp: !isTop });
+                }
+
+                if (Math.random() < 0.4) {
+                    stars.push({ x: sectionX + 50, y: isTop ? y + 60 : y - 50, collected: false, size: 12 });
+                }
+            }
+
+            while (stars.length < 3) {
+                const x = 200 + Math.random() * (levelWidth - 400);
+                stars.push({ x: x, y: canvasHeight * 0.45 + (Math.random() - 0.5) * 100, collected: false, size: 12 });
+            }
+            stars = stars.slice(0, 3);
+
+            exitZone = { x: levelWidth - 80, y: canvasHeight * 0.4, width: 60, height: 80 };
+            platforms.push({ x: levelWidth - 150, y: canvasHeight * 0.6, width: 150, height: 20 });
+        }
+
+        function resetPlayer() {
+            player.x = 50;
+            player.y = canvasHeight * 0.5;
+            player.vy = 0;
+            gravityDir = 1;
+            updateGravityIndicator();
+            cameraX = 0;
+        }
+
+        let cameraX = 0;
+
+        function updateGravityIndicator() {
+            const indicator = document.getElementById('gravityIndicator');
+            indicator.textContent = gravityDir === 1 ? '⬇️' : '⬆️';
+            indicator.style.transform = `translateY(-50%) rotate(${gravityDir === 1 ? 0 : 180}deg)`;
+        }
+
+        function flipGravity() {
+            if (!gameRunning || levelComplete) return;
+            gravityDir *= -1;
+            updateGravityIndicator();
+        }
+
+        function update() {
+            if (!gameRunning || levelComplete) return;
+
+            player.vy += GRAVITY * gravityDir;
+            player.vy = Math.max(-MAX_FALL_SPEED, Math.min(MAX_FALL_SPEED, player.vy));
+            player.y += player.vy;
+            player.x += SCROLL_SPEED;
+
+            const targetCameraX = player.x - canvasWidth * 0.3;
+            cameraX += (targetCameraX - cameraX) * 0.1;
+            cameraX = Math.max(0, cameraX);
+
+            for (const plat of platforms) {
+                if (player.x + player.size > plat.x - cameraX && player.x - player.size < plat.x + plat.width - cameraX) {
+                    if (gravityDir === 1) {
+                        if (player.y + player.size > plat.y && player.y + player.size < plat.y + plat.height + 10 && player.vy > 0) {
+                            player.y = plat.y - player.size;
+                            player.vy = 0;
+                        }
+                    } else {
+                        if (player.y - player.size < plat.y + plat.height && player.y - player.size > plat.y - 10 && player.vy < 0) {
+                            player.y = plat.y + plat.height + player.size;
+                            player.vy = 0;
+                        }
+                    }
+                }
+            }
+
+            if (player.y < player.size || player.y > canvasHeight - player.size) {
+                die();
+                return;
+            }
+
+            for (const spike of spikes) {
+                const spikeScreenX = spike.x - cameraX;
+                if (player.x + player.size > spikeScreenX && player.x - player.size < spikeScreenX + spike.width &&
+                    player.y + player.size > spike.y && player.y - player.size < spike.y + spike.height) {
+                    die();
+                    return;
+                }
+            }
+
+            for (const star of stars) {
+                if (star.collected) continue;
+                const starScreenX = star.x - cameraX;
+                const dx = player.x - starScreenX;
+                const dy = player.y - star.y;
+                if (Math.sqrt(dx * dx + dy * dy) < player.size + star.size) {
+                    star.collected = true;
+                    totalStars++;
+                    updateStarsUI();
+                }
+            }
+
+            const exitScreenX = exitZone.x - cameraX;
+            if (player.x > exitScreenX && player.x < exitScreenX + exitZone.width &&
+                player.y > exitZone.y && player.y < exitZone.y + exitZone.height) {
+                completeLevel();
+            }
+        }
+
+        function die() {
+            deaths++;
+            document.getElementById('deaths').textContent = deaths;
+            resetPlayer();
+            const levelStarsCollected = stars.filter(s => s.collected).length;
+            totalStars -= levelStarsCollected;
+            stars.forEach(s => s.collected = false);
+            updateStarsUI();
+        }
+
+        function completeLevel() {
+            levelComplete = true;
+            const starsCollected = stars.filter(s => s.collected).length;
+            document.getElementById('starsEarned').textContent = '⭐'.repeat(starsCollected) || '(No stars)';
+            document.getElementById('completedLevel').textContent = currentLevel;
+            document.getElementById('levelComplete').style.display = 'flex';
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            if (currentLevel > 10) {
+                showGameComplete();
+                return;
+            }
+            document.getElementById('level').textContent = currentLevel;
+            document.getElementById('levelComplete').style.display = 'none';
+            levelComplete = false;
+            generateLevel(currentLevel);
+            resetPlayer();
+        }
+
+        function showGameComplete() {
+            document.getElementById('totalStars').textContent = totalStars;
+            document.getElementById('totalDeaths').textContent = deaths;
+            document.getElementById('levelComplete').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        function updateStarsUI() {
+            document.getElementById('stars').textContent = '⭐'.repeat(Math.min(totalStars, 30));
+        }
+
+        function draw() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+            gradient.addColorStop(0, '#1a1a3e');
+            gradient.addColorStop(1, '#0f0f23');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
+            ctx.lineWidth = 1;
+            const gridOffset = cameraX % 50;
+            for (let x = -gridOffset; x < canvasWidth; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvasHeight);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvasHeight; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvasWidth, y);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#4ecdc4';
+            for (const plat of platforms) {
+                const screenX = plat.x - cameraX;
+                if (screenX > -plat.width && screenX < canvasWidth) {
+                    ctx.shadowColor = '#4ecdc4';
+                    ctx.shadowBlur = 10;
+                    ctx.fillRect(screenX, plat.y, plat.width, plat.height);
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            ctx.fillStyle = '#ff6b6b';
+            for (const spike of spikes) {
+                const screenX = spike.x - cameraX;
+                if (screenX > -spike.width && screenX < canvasWidth) {
+                    ctx.beginPath();
+                    if (spike.pointUp) {
+                        ctx.moveTo(screenX, spike.y + spike.height);
+                        ctx.lineTo(screenX + spike.width / 2, spike.y);
+                        ctx.lineTo(screenX + spike.width, spike.y + spike.height);
+                    } else {
+                        ctx.moveTo(screenX, spike.y);
+                        ctx.lineTo(screenX + spike.width / 2, spike.y + spike.height);
+                        ctx.lineTo(screenX + spike.width, spike.y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            for (const star of stars) {
+                if (star.collected) continue;
+                const screenX = star.x - cameraX;
+                if (screenX > -20 && screenX < canvasWidth + 20) {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.shadowColor = '#ffd700';
+                    ctx.shadowBlur = 15;
+                    drawStar(screenX, star.y, star.size, 5);
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            const exitScreenX = exitZone.x - cameraX;
+            if (exitScreenX > -exitZone.width && exitScreenX < canvasWidth) {
+                ctx.fillStyle = 'rgba(123, 47, 247, 0.3)';
+                ctx.strokeStyle = '#7b2ff7';
+                ctx.lineWidth = 3;
+                ctx.fillRect(exitScreenX, exitZone.y, exitZone.width, exitZone.height);
+                ctx.strokeRect(exitScreenX, exitZone.y, exitZone.width, exitZone.height);
+                ctx.fillStyle = '#7b2ff7';
+                ctx.font = '20px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('EXIT', exitScreenX + exitZone.width / 2, exitZone.y + exitZone.height / 2 + 7);
+            }
+
+            ctx.fillStyle = '#00d4ff';
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = 'rgba(0, 212, 255, 0.3)';
+            ctx.beginPath();
+            ctx.arc(player.x - 10, player.y, player.size * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(player.x - 18, player.y, player.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawStar(cx, cy, size, points) {
+            ctx.beginPath();
+            for (let i = 0; i < points * 2; i++) {
+                const r = i % 2 === 0 ? size : size / 2;
+                const angle = (i * Math.PI) / points - Math.PI / 2;
+                const x = cx + Math.cos(angle) * r;
+                const y = cy + Math.sin(angle) * r;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            currentLevel = 1;
+            totalStars = 0;
+            deaths = 0;
+            levelComplete = false;
+
+            document.getElementById('level').textContent = currentLevel;
+            document.getElementById('deaths').textContent = deaths;
+            updateStarsUI();
+
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+
+            generateLevel(currentLevel);
+            resetPlayer();
+            gameRunning = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        container.addEventListener('click', flipGravity);
+        container.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            flipGravity();
+        });
+
+        document.getElementById('startBtn').addEventListener('click', (e) => { e.stopPropagation(); startGame(); });
+        document.getElementById('nextLevelBtn').addEventListener('click', (e) => { e.stopPropagation(); nextLevel(); });
+        document.getElementById('restartBtn').addEventListener('click', (e) => { e.stopPropagation(); startGame(); });
+
+        getCanvasSize();
+        draw();
+    </script>
+</body>
+</html>
